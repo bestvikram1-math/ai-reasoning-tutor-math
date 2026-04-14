@@ -11,11 +11,11 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 st.set_page_config(page_title="AI Tutor")
 
-st.title("🧠 AI Reasoning Tutor")
-st.write("Smart AI tutor with step-by-step solutions.")
+st.title("🧠 AI Reasoning Tutor (Smart Mode)")
+st.write("Now with verification + confidence + step validation.")
 
 # -------------------------
-# USAGE LIMIT (10/day)
+# USAGE LIMIT
 # -------------------------
 if "usage_count" not in st.session_state:
     st.session_state.usage_count = 0
@@ -28,200 +28,162 @@ if time.time() - st.session_state.reset_time > 86400:
 st.write(f"📊 Usage today: {st.session_state.usage_count}/10")
 
 # -------------------------
-# MODEL SELECTION (COST SAVE)
+# MODEL SELECTOR
 # -------------------------
 def choose_model(question, has_image):
     if has_image:
-        return "gpt-4o"  # required for image
-
+        return "gpt-4o"
     if question and len(question) < 80:
-        return "gpt-3.5-turbo"  # cheap
-
-    return "gpt-4o"  # complex
-
-
-# -------------------------
-# MODE
-# -------------------------
-mode = st.selectbox("Choose Mode:", ["Quick Solve", "Guided Mode"])
+        return "gpt-3.5-turbo"
+    return "gpt-4o"
 
 # -------------------------
 # INPUT
 # -------------------------
 question = st.text_input("Enter a math question:")
 
-uploaded_file = st.file_uploader("Or upload an image", type=["png", "jpg", "jpeg"])
+uploaded_file = st.file_uploader("Upload image (optional)", type=["png", "jpg", "jpeg"])
 
 image_base64 = None
-
-if uploaded_file is not None:
+if uploaded_file:
     image_bytes = uploaded_file.read()
     image_base64 = base64.b64encode(image_bytes).decode("utf-8")
     st.image(uploaded_file, caption="Uploaded Image")
 
 # -------------------------
-# QUICK SOLVE
+# SOLVE FUNCTION
 # -------------------------
-if mode == "Quick Solve":
+def solve_and_verify(question, image_base64, model):
 
-    if st.button("Solve"):
+    user_content = []
 
-        if st.session_state.usage_count >= 10:
-            st.warning("⚠️ Daily limit reached.")
-            st.stop()
+    if question:
+        user_content.append({"type": "text", "text": question})
 
-        if not question and not image_base64:
-            st.warning("Enter a question or upload an image.")
-        else:
-            with st.spinner("Thinking..."):
+    if image_base64:
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{image_base64}"}
+        })
 
-                try:
-                    model = choose_model(question, image_base64 is not None)
+    # STEP 1: SOLVE
+    solve_response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": """
+You are an expert mathematician.
 
-                    user_content = []
-
-                    if question:
-                        user_content.append({"type": "text", "text": question})
-
-                    if image_base64:
-                        user_content.append({
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/png;base64,{image_base64}"
-                            }
-                        })
-
-                    response = client.chat.completions.create(
-                        model=model,
-                        messages=[
-                            {
-                                "role": "system",
-                                "content": """
-You are an expert math tutor.
-
-RULES:
+- Solve rigorously.
 - Use LaTeX for all math.
-- Use $$...$$ for equations.
-- Solve step-by-step.
-- Highlight final answer clearly.
+- Show step-by-step solution.
 """
-                            },
-                            {
-                                "role": "user",
-                                "content": user_content
-                            }
-                        ]
-                    )
+            },
+            {"role": "user", "content": user_content}
+        ]
+    )
 
-                    answer = response.choices[0].message.content
+    solution = solve_response.choices[0].message.content
 
-                    st.success("✅ Solution:")
-                    st.markdown(answer)
+    # STEP 2: VERIFY
+    verify_response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": """
+Check if the solution is mathematically correct.
+If incorrect, fix it completely.
+Return final corrected solution.
+"""
+            },
+            {"role": "user", "content": solution}
+        ]
+    )
 
-                    st.session_state.usage_count += 1
+    verified_solution = verify_response.choices[0].message.content
 
-                except Exception as e:
-                    st.error("Error occurred")
-                    st.text(str(e))
+    # STEP 3: CONFIDENCE SCORE
+    confidence_response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": "Give confidence score (0-100) for correctness and explain briefly."
+            },
+            {"role": "user", "content": verified_solution}
+        ]
+    )
 
+    confidence = confidence_response.choices[0].message.content
+
+    return verified_solution, confidence
 
 # -------------------------
-# GUIDED MODE
+# STEP VALIDATION
 # -------------------------
-elif mode == "Guided Mode":
+def validate_step(question, step):
 
-    st.write("🤝 Let's solve step-by-step together.")
-
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-
-    if st.button("Start Guided Solving"):
-
-        if st.session_state.usage_count >= 10:
-            st.warning("⚠️ Daily limit reached.")
-            st.stop()
-
-        if not question and not image_base64:
-            st.warning("Enter a question or upload an image.")
-        else:
-            user_content = []
-
-            if question:
-                user_content.append({"type": "text", "text": question})
-
-            if image_base64:
-                user_content.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{image_base64}"
-                    }
-                })
-
-            st.session_state.chat_history = [
-                {
-                    "role": "system",
-                    "content": """
-You are a math tutor.
-
-DO NOT give full solution.
-Ask one step at a time.
-Guide interactively.
-Use LaTeX.
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": """
+Check if the student's step is correct.
+- If correct → say why
+- If wrong → explain mistake and guide next step
 """
-                },
-                {
-                    "role": "user",
-                    "content": user_content
-                }
-            ]
+            },
+            {
+                "role": "user",
+                "content": f"Question: {question}\nStudent Step: {step}"
+            }
+        ]
+    )
 
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",  # cheaper
-                messages=st.session_state.chat_history
-            )
+    return response.choices[0].message.content
 
-            reply = response.choices[0].message.content
+# -------------------------
+# BUTTON: SOLVE
+# -------------------------
+if st.button("Solve"):
 
-            st.session_state.chat_history.append(
-                {"role": "assistant", "content": reply}
-            )
+    if st.session_state.usage_count >= 10:
+        st.warning("⚠️ Daily limit reached.")
+        st.stop()
+
+    if not question and not image_base64:
+        st.warning("Enter a question or upload an image.")
+    else:
+        with st.spinner("Thinking..."):
+
+            model = choose_model(question, image_base64 is not None)
+
+            solution, confidence = solve_and_verify(question, image_base64, model)
+
+            st.success("✅ Verified Solution:")
+            st.markdown(solution)
+
+            st.info("📊 Confidence:")
+            st.write(confidence)
 
             st.session_state.usage_count += 1
 
-    # Display chat
-    for msg in st.session_state.chat_history:
-        if msg["role"] == "assistant":
-            st.markdown(f"🤖 {msg['content']}")
-        elif msg["role"] == "user":
-            st.markdown(f"👤 {msg['content']}")
+# -------------------------
+# STEP VALIDATION UI
+# -------------------------
+st.subheader("🧠 Validate Your Step")
 
-    user_input = st.text_input("Your step / answer:")
+student_step = st.text_input("Enter your step:")
 
-    if st.button("Submit Step"):
+if st.button("Check Step"):
 
-        if st.session_state.usage_count >= 10:
-            st.warning("⚠️ Daily limit reached.")
-            st.stop()
+    if student_step.strip() == "":
+        st.warning("Enter a step first.")
+    else:
+        feedback = validate_step(question, student_step)
 
-        if user_input.strip() != "":
-            st.session_state.chat_history.append(
-                {"role": "user", "content": user_input}
-            )
-
-            # Limit guided steps
-            if len(st.session_state.chat_history) > 10:
-                st.warning("Step limit reached.")
-                st.stop()
-
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=st.session_state.chat_history
-            )
-
-            reply = response.choices[0].message.content
-
-            st.session_state.chat_history.append(
-                {"role": "assistant", "content": reply}
-            )
-
-            st.session_state.usage_count += 1
+        st.warning("📌 Feedback:")
+        st.write(feedback)
