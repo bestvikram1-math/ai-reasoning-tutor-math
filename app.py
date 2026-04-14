@@ -123,17 +123,30 @@ elif mode == "Guided Mode":
 
     if st.button("Start Guided Solving"):
 
-        if st.session_state.usage_count >= 10:
-            st.warning("⚠️ Daily limit reached.")
-            st.stop()
+    if st.session_state.usage_count >= 10:
+        st.warning("⚠️ Daily limit reached.")
+        st.stop()
 
-        if not question:
-            st.warning("Enter a question first.")
-        else:
-            st.session_state.chat_history = [
-                {
-                    "role": "system",
-                    "content": """
+    if not question and not image_base64:
+        st.warning("Enter a question or upload an image.")
+    else:
+        user_content = []
+
+        if question:
+            user_content.append({"type": "text", "text": question})
+
+        if image_base64:
+            user_content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/png;base64,{image_base64}"
+                }
+            })
+
+        st.session_state.chat_history = [
+            {
+                "role": "system",
+                "content": """
 You are a math tutor.
 
 DO NOT give full solution.
@@ -141,22 +154,25 @@ Ask one step at a time.
 Guide the student interactively.
 Use LaTeX for math.
 """
-                },
-                {"role": "user", "content": question}
-            ]
+            },
+            {
+                "role": "user",
+                "content": user_content
+            }
+        ]
 
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=st.session_state.chat_history
-            )
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=st.session_state.chat_history
+        )
 
-            reply = response.choices[0].message.content
+        reply = response.choices[0].message.content
 
-            st.session_state.chat_history.append(
-                {"role": "assistant", "content": reply}
-            )
+        st.session_state.chat_history.append(
+            {"role": "assistant", "content": reply}
+        )
 
-            st.session_state.usage_count += 1
+        st.session_state.usage_count += 1
 
     # show conversation
     for msg in st.session_state.chat_history:
