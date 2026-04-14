@@ -33,7 +33,7 @@ if mode == "Quick Solve":
                 response = openai.ChatCompletion.create(
                     model="gpt-3.5-turbo",
                     messages=[
-                        {"role": "system", "content": "You are a math tutor. Solve step-by-step using LaTeX for all mathematical expressions. Use $$ for equations."}
+                        {"role": "system", "content": "You are a math tutor. Solve step-by-step using LaTeX for all mathematical expressions. Use $$ for equations."},
                         {"role": "user", "content": question}
                     ]
                 )
