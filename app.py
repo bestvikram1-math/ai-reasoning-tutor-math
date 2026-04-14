@@ -3,7 +3,7 @@ from openai import OpenAI
 import os
 
 # Load API key
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI()
 
 st.set_page_config(page_title="AI Tutor")
 
