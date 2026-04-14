@@ -125,4 +125,4 @@ Use LaTeX for math."""
 
             reply = response["choices"][0]["message"]["content"]
 
-            st.session_state.chat_history.append({"role": "assistant", "content": reply)
+            st.session_state.chat_history.append({"role": "assistant", "content": reply})
