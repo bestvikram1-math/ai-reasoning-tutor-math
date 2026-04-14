@@ -70,7 +70,7 @@ IMPORTANT RULES:
                         answer = fix["choices"][0]["message"]["content"]
 
                     st.success("✅ Solution:")
-                    st.markdown(answer)
+                    render_latex(answer)
 
                 except Exception as e:
                     st.error("Error occurred")
