@@ -1,6 +1,16 @@
 import streamlit as st
 import openai
 import os
+import re
+
+def render_latex(text):
+    parts = re.split(r'(\$\$.*?\$\$)', text, flags=re.DOTALL)
+
+    for part in parts:
+        if part.startswith("$$") and part.endswith("$$"):
+            st.latex(part[2:-2])  # remove $$ and render
+        else:
+            st.write(part)
 
 # Load API key
 openai.api_key = os.environ["OPENAI_API_KEY"]
