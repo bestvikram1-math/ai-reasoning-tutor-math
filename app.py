@@ -11,8 +11,8 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 st.set_page_config(page_title="AI Tutor")
 
-st.title("🧠 AI Reasoning Tutor (GPT-4o)")
-st.write("Solve math problems step-by-step with AI.")
+st.title("🧠 AI Reasoning Tutor")
+st.write("Smart AI tutor with step-by-step solutions.")
 
 # -------------------------
 # USAGE LIMIT (10/day)
@@ -21,12 +21,24 @@ if "usage_count" not in st.session_state:
     st.session_state.usage_count = 0
     st.session_state.reset_time = time.time()
 
-# Reset after 24 hrs
 if time.time() - st.session_state.reset_time > 86400:
     st.session_state.usage_count = 0
     st.session_state.reset_time = time.time()
 
 st.write(f"📊 Usage today: {st.session_state.usage_count}/10")
+
+# -------------------------
+# MODEL SELECTION (COST SAVE)
+# -------------------------
+def choose_model(question, has_image):
+    if has_image:
+        return "gpt-4o"  # required for image
+
+    if question and len(question) < 80:
+        return "gpt-3.5-turbo"  # cheap
+
+    return "gpt-4o"  # complex
+
 
 # -------------------------
 # MODE
@@ -55,15 +67,17 @@ if mode == "Quick Solve":
     if st.button("Solve"):
 
         if st.session_state.usage_count >= 10:
-            st.warning("⚠️ Daily limit reached (10 queries).")
+            st.warning("⚠️ Daily limit reached.")
             st.stop()
 
         if not question and not image_base64:
-            st.warning("Please enter a question or upload an image.")
+            st.warning("Enter a question or upload an image.")
         else:
             with st.spinner("Thinking..."):
 
                 try:
+                    model = choose_model(question, image_base64 is not None)
+
                     user_content = []
 
                     if question:
@@ -78,7 +92,7 @@ if mode == "Quick Solve":
                         })
 
                     response = client.chat.completions.create(
-                        model="gpt-4o",
+                        model=model,
                         messages=[
                             {
                                 "role": "system",
@@ -86,10 +100,10 @@ if mode == "Quick Solve":
 You are an expert math tutor.
 
 RULES:
-- Use LaTeX for all math expressions.
+- Use LaTeX for all math.
 - Use $$...$$ for equations.
 - Solve step-by-step.
-- Clearly highlight final answer.
+- Highlight final answer clearly.
 """
                             },
                             {
@@ -104,12 +118,12 @@ RULES:
                     st.success("✅ Solution:")
                     st.markdown(answer)
 
-                    # increment usage
                     st.session_state.usage_count += 1
 
                 except Exception as e:
                     st.error("Error occurred")
                     st.text(str(e))
+
 
 # -------------------------
 # GUIDED MODE
@@ -132,49 +146,49 @@ elif mode == "Guided Mode":
         else:
             user_content = []
 
-        if question:
-            user_content.append({"type": "text", "text": question})
+            if question:
+                user_content.append({"type": "text", "text": question})
 
-        if image_base64:
-            user_content.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/png;base64,{image_base64}"
-                }
-            })
+            if image_base64:
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{image_base64}"
+                    }
+                })
 
-        st.session_state.chat_history = [
-            {
-                "role": "system",
-                "content": """
+            st.session_state.chat_history = [
+                {
+                    "role": "system",
+                    "content": """
 You are a math tutor.
 
 DO NOT give full solution.
 Ask one step at a time.
-Guide the student interactively.
-Use LaTeX for math.
+Guide interactively.
+Use LaTeX.
 """
-            },
-            {
-                "role": "user",
-                "content": user_content
-            }
-        ]
+                },
+                {
+                    "role": "user",
+                    "content": user_content
+                }
+            ]
 
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=st.session_state.chat_history
-        )
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",  # cheaper
+                messages=st.session_state.chat_history
+            )
 
-        reply = response.choices[0].message.content
+            reply = response.choices[0].message.content
 
-        st.session_state.chat_history.append(
-            {"role": "assistant", "content": reply}
-        )
+            st.session_state.chat_history.append(
+                {"role": "assistant", "content": reply}
+            )
 
-        st.session_state.usage_count += 1
+            st.session_state.usage_count += 1
 
-    # show conversation
+    # Display chat
     for msg in st.session_state.chat_history:
         if msg["role"] == "assistant":
             st.markdown(f"🤖 {msg['content']}")
@@ -194,8 +208,13 @@ Use LaTeX for math.
                 {"role": "user", "content": user_input}
             )
 
+            # Limit guided steps
+            if len(st.session_state.chat_history) > 10:
+                st.warning("Step limit reached.")
+                st.stop()
+
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-3.5-turbo",
                 messages=st.session_state.chat_history
             )
 
