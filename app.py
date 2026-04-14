@@ -1,30 +1,31 @@
 import streamlit as st
-import openai
+from openai import OpenAI
 import os
-import re
+import base64
 
-def render_latex(text):
-    parts = re.split(r'(\$\$.*?\$\$)', text, flags=re.DOTALL)
-
-    for part in parts:
-        if part.startswith("$$") and part.endswith("$$"):
-            st.latex(part[2:-2])  # remove $$ and render
-        else:
-            st.write(part)
-
-# Load API key
-openai.api_key = os.environ["OPENAI_API_KEY"]
+# Initialize client
+client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 st.set_page_config(page_title="AI Tutor")
 
-st.title("🧠 AI Reasoning Tutor")
-st.write("Solve math questions with step-by-step solutions in LaTeX.")
+st.title("🧠 AI Reasoning Tutor (GPT-4o)")
+st.write("Solve math problems with step-by-step LaTeX solutions.")
 
 # Mode selection
 mode = st.selectbox("Choose Mode:", ["Quick Solve", "Guided Mode"])
 
-# Input
+# Text input
 question = st.text_input("Enter a math question:")
+
+# Image upload
+uploaded_file = st.file_uploader("Or upload an image", type=["png", "jpg", "jpeg"])
+
+image_base64 = None
+
+if uploaded_file is not None:
+    image_bytes = uploaded_file.read()
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    st.image(uploaded_file, caption="Uploaded Image")
 
 # -------------------------
 # QUICK SOLVE MODE
@@ -32,45 +33,52 @@ question = st.text_input("Enter a math question:")
 if mode == "Quick Solve":
 
     if st.button("Solve"):
-        if question.strip() == "":
-            st.warning("Please enter a question.")
+        if not question and not image_base64:
+            st.warning("Please enter a question or upload an image.")
         else:
             with st.spinner("Thinking..."):
 
                 try:
-                    response = openai.ChatCompletion.create(
-                        model="gpt-3.5-turbo",
+                    # Build message
+                    user_content = []
+
+                    if question:
+                        user_content.append({"type": "text", "text": question})
+
+                    if image_base64:
+                        user_content.append({
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{image_base64}"
+                            }
+                        })
+
+                    response = client.chat.completions.create(
+                        model="gpt-4o",
                         messages=[
                             {
                                 "role": "system",
-                                "content": """You are a math tutor.
+                                "content": """
+You are an expert math tutor.
 
-IMPORTANT RULES:
+STRICT RULES:
 - Use LaTeX for ALL math expressions.
 - Use $$...$$ for equations.
-- Show step-by-step solution.
-- Clearly highlight final answer.
+- Provide step-by-step solution.
+- Highlight final answer clearly.
 """
                             },
-                            {"role": "user", "content": question}
+                            {
+                                "role": "user",
+                                "content": user_content
+                            }
                         ]
                     )
 
-                    answer = response["choices"][0]["message"]["content"]
-
-                    # Fallback: enforce LaTeX
-                    if "$$" not in answer:
-                        fix = openai.ChatCompletion.create(
-                            model="gpt-3.5-turbo",
-                            messages=[
-                                {"role": "system", "content": "Convert all math expressions into LaTeX using $$...$$."},
-                                {"role": "user", "content": answer}
-                            ]
-                        )
-                        answer = fix["choices"][0]["message"]["content"]
+                    answer = response.choices[0].message.content
 
                     st.success("✅ Solution:")
-                    render_latex(answer)
+                    st.markdown(answer)
 
                 except Exception as e:
                     st.error("Error occurred")
@@ -87,52 +95,52 @@ elif mode == "Guided Mode":
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    # Start guided session
     if st.button("Start Guided Solving"):
-        if question.strip() == "":
+        if not question:
             st.warning("Enter a question first.")
         else:
             st.session_state.chat_history = [
                 {
                     "role": "system",
-                    "content": """You are a math tutor.
+                    "content": """
+You are a math tutor.
 
 DO NOT give full solution.
 Ask one step at a time.
 Guide the student interactively.
-Use LaTeX for math."""
+Use LaTeX for math expressions.
+"""
                 },
                 {"role": "user", "content": question}
             ]
 
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
+            response = client.chat.completions.create(
+                model="gpt-4o",
                 messages=st.session_state.chat_history
             )
 
-            reply = response["choices"][0]["message"]["content"]
+            reply = response.choices[0].message.content
 
             st.session_state.chat_history.append({"role": "assistant", "content": reply})
 
-    # Show chat
+    # Show conversation
     for msg in st.session_state.chat_history:
         if msg["role"] == "assistant":
             st.markdown(f"🤖 {msg['content']}")
         elif msg["role"] == "user":
             st.markdown(f"👤 {msg['content']}")
 
-    # User step input
     user_input = st.text_input("Your step / answer:")
 
     if st.button("Submit Step"):
         if user_input.strip() != "":
             st.session_state.chat_history.append({"role": "user", "content": user_input})
 
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
+            response = client.chat.completions.create(
+                model="gpt-4o",
                 messages=st.session_state.chat_history
             )
 
-            reply = response["choices"][0]["message"]["content"]
+            reply = response.choices[0].message.content
 
             st.session_state.chat_history.append({"role": "assistant", "content": reply})
