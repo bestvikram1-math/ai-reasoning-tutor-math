@@ -33,7 +33,7 @@ if mode == "Quick Solve":
                 response = openai.ChatCompletion.create(
                     model="gpt-3.5-turbo",
                     messages=[
-                        {"role": "system", "content": "You are a math tutor. Solve step-by-step clearly."},
+                        {"role": "system", "content": "You are a math tutor. Solve step-by-step using LaTeX for all mathematical expressions. Use $$ for equations."}
                         {"role": "user", "content": question}
                     ]
                 )
@@ -41,7 +41,7 @@ if mode == "Quick Solve":
                 answer = response["choices"][0]["message"]["content"]
 
                 st.success("Solution:")
-                st.write(answer)
+                st.markdown(answer, unsafe_allow_html=True)
 
 # -------------------------
 # GUIDED MODE
