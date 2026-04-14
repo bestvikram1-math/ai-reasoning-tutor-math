@@ -123,14 +123,14 @@ elif mode == "Guided Mode":
 
     if st.button("Start Guided Solving"):
 
-    if st.session_state.usage_count >= 10:
-        st.warning("⚠️ Daily limit reached.")
-        st.stop()
+        if st.session_state.usage_count >= 10:
+            st.warning("⚠️ Daily limit reached.")
+            st.stop()
 
-    if not question and not image_base64:
-        st.warning("Enter a question or upload an image.")
-    else:
-        user_content = []
+        if not question and not image_base64:
+            st.warning("Enter a question or upload an image.")
+        else:
+            user_content = []
 
         if question:
             user_content.append({"type": "text", "text": question})
